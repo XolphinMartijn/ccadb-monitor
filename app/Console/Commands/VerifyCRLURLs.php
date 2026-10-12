@@ -113,8 +113,10 @@ class VerifyCRLURLs extends Command
         $id = $row['id'] ?? 0;
         $subject = $row['Certificate Name'];
         $salesforceRecordID = $row['Salesforce Record ID'];
+        $caCertificateType = $row['Certificate Record Type'];
 
         foreach (self::URL_FIELDS as $field) {
+
             if (!array_key_exists($field, $row)) {
                 $this->error("Field '{$field}' is relied upon but not present in the CSV.");
             }
@@ -185,8 +187,9 @@ class VerifyCRLURLs extends Command
 
                     if ($thisUpdateDate !== null) {
                         if (!$this->isCRLWithinAcceptableAge($thisUpdateDate)) {
-                            $maxDays = (int)config('app.crl_max_signature_age_days', 30);
-                            $message = "CRL signature exceeds maximum age of {$maxDays} days (signed: " . $thisUpdateDate->format('Y-m-d H:i:s') . ')';
+
+                                $maxHours = (int)config('app.crl_max_signature_age_hours', 720);
+                             $message = "$caCertificateType CRL exceeds maximum age of {$maxHours} hours (signed: " . $thisUpdateDate->format('Y-m-d H:i:s') . ')';
                             $this->logFieldError($field, $message, $subject, $salesforceRecordID, $value, $url);
                             if ($mode === 'Integrated') {
                                 $issue->createOrUpdateError($id, $url, $message, 'CRL: CRL too old', false);

@@ -125,5 +125,6 @@ return [
     // Custom application settings
     'http_user_agent' => env('HTTP_USER_AGENT', 'CCADBURLMonitor/1.0'),
     'ca_owner' => env('CA_OWNER', ''),
-    'ccadb_all_certificate_records_url' => env('CCADB_ALL_CERTIFICATE_RECORDS_URL', 'https://ccadb-public.secure.force.com/mozilla/CCADB_Export_All_CertificatesCSV')
+    'ccadb_all_certificate_records_url' => env('CCADB_ALL_CERTIFICATE_RECORDS_URL', 'https://ccadb-public.secure.force.com/mozilla/CCADB_Export_All_CertificatesCSV'),
+    'crl_max_signature_age_hours' => env('CRL_MAX_SIGNATURE_AGE_HOURS', 24),
 ];
