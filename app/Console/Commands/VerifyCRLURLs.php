@@ -193,9 +193,9 @@ class VerifyCRLURLs extends Command
                     $thisUpdateDate = $this->extractCRLThisUpdateDate($crlContent);
 
                     if ($thisUpdateDate !== null) {
-                        if (!$this->isCRLWithinAcceptableAge($thisUpdateDate)) {
+                        if (!$this->isCRLWithinAcceptableAge($thisUpdateDate, $subject)) {
 
-                                $maxHours = (int)config('app.crl_max_signature_age_hours', 720);
+                                $maxHours = $this->getMaxCRLSignatureAgeHours($subject);
                              $message = "$caCertificateType CRL exceeds maximum age of {$maxHours} hours (signed: " . $thisUpdateDate->format('Y-m-d H:i:s') . ')';
                             $this->logFieldError($field, $message, $subject, $salesforceRecordID, $value, $url);
                             if ($mode === 'Integrated') {
@@ -420,13 +420,79 @@ class VerifyCRLURLs extends Command
     /**
      * Check if the CRL signature date is within the acceptable age threshold.
      */
-    private function isCRLWithinAcceptableAge(Carbon $thisUpdateDate): bool
+    private function isCRLWithinAcceptableAge(Carbon $thisUpdateDate, string $subject): bool
     {
-        $maxHours = (int)config('app.crl_max_signature_age_hours', 720);
+        $maxHours = $this->getMaxCRLSignatureAgeHours($subject);
         $maxAge = Carbon::now()->subHours($maxHours);
 
         return $thisUpdateDate->isAfter($maxAge);
     }
 
-}
+    /**
+     * Get the maximum CRL signature age in hours for a given subject.
+     * Root CA exceptions can be configured via CN allowlist and use a longer threshold.
+     */
+    private function getMaxCRLSignatureAgeHours(string $subject): int
+    {
+        $subject = trim((string) $subject);
 
+        if ($this->isRootCaCrlException($subject)) {
+            return (int) config('app.root_ca_crl_max_signature_age_hours', 720);
+        }
+
+        return (int) config('app.crl_max_signature_age_hours', 24);
+    }
+
+    /**
+     * Determine whether this certificate subject is one of the configured root CA exceptions.
+     */
+    private function isRootCaCrlException(string $subject): bool
+    {
+        $subject = $this->normalizeCertificateName($subject);
+        if ($subject === '') {
+            return false;
+        }
+
+        $rootCaCns = config('app.root_ca_crl_max_signature_age_cns', []);
+        if (!is_array($rootCaCns)) {
+            $rootCaCns = array_filter(array_map('trim', explode(',', (string) $rootCaCns)));
+        }
+
+        foreach ($rootCaCns as $cn) {
+            $normalizedCn = $this->normalizeCertificateName((string) $cn);
+            if ($normalizedCn === '') {
+                continue;
+            }
+
+            if ($subject === $normalizedCn || str_contains($subject, $normalizedCn)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Normalize a certificate name or DN-type string down to the CN value when present.
+     */
+    private function normalizeCertificateName(string $value): string
+    {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return '';
+        }
+
+        $value = trim($value, "\"'");
+
+        if (preg_match('/(?:^|,)\s*CN\s*=\s*([^,]+)/i', $value, $matches)) {
+            return trim($matches[1]);
+        }
+
+        if (preg_match('/^CN\s*=\s*(.+)$/i', $value, $matches)) {
+            return trim($matches[1]);
+        }
+
+        return $value;
+    }
+
+}

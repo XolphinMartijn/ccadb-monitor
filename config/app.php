@@ -127,4 +127,6 @@ return [
     'ca_owner' => env('CA_OWNER', ''),
     'ccadb_all_certificate_records_url' => env('CCADB_ALL_CERTIFICATE_RECORDS_URL', 'https://ccadb-public.secure.force.com/mozilla/CCADB_Export_All_CertificatesCSV'),
     'crl_max_signature_age_hours' => env('CRL_MAX_SIGNATURE_AGE_HOURS', 24),
+    'root_ca_crl_max_signature_age_hours' => env('ROOT_CA_CRL_MAX_SIGNATURE_AGE_HOURS', 720),
+    'root_ca_crl_max_signature_age_cns' => array_filter(array_map('trim', explode(',', (string) env('ROOT_CA_CRL_MAX_SIGNATURE_AGE_CNS', '')))),
 ];
