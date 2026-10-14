@@ -158,10 +158,17 @@ class VerifyCRLURLs extends Command
                 try {
                     $response = Http::withHeaders([
                         'User-Agent' => $ua,
+                        'Cache-Control' => 'no-cache, no-store, must-revalidate, max-age=0',
+                        'Pragma' => 'no-cache',
+                        'Expires' => '0',
                     ])->withOptions([
                         'allow_redirects' => [
                             'max' => 10, // allow following 30x redirects
                             'track_redirects' => true,
+                        ],
+                        'curl' => [
+                            CURLOPT_FRESH_CONNECT => true,
+                            CURLOPT_FORBID_REUSE => true,
                         ],
                     ])->timeout(30)->get($url);
                 } catch (\Throwable $e) {
