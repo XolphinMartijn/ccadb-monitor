@@ -6,6 +6,20 @@ use Monolog\Handler\StreamHandler;
 use Monolog\Handler\SyslogUdpHandler;
 use Monolog\Processor\PsrLogMessageProcessor;
 
+$logStack = array_values(array_filter(array_map('trim', explode(',', (string) env('LOG_STACK', 'email')))));
+if ($logStack === []) {
+    $logStack = ['email'];
+}
+
+$logRecipients = array_values(array_filter(array_map('trim', explode(',', (string) env('LOGGING_EMAIL_RECIPIENTS', '')))));
+if (!in_array('email', $logStack, true) && $logRecipients !== []) {
+    $logStack[] = 'email';
+}
+
+if (! in_array('email', $logStack, true)) {
+    $logStack[] = 'email';
+}
+
 return [
     /*
     |--------------------------------------------------------------------------
@@ -53,14 +67,14 @@ return [
     'channels' => [
         'stack' => [
             'driver' => 'stack',
-            'channels' => explode(',', (string) env('LOG_STACK', 'teams')),
+            'channels' => $logStack,
             'ignore_exceptions' => false,
         ],
 
         'email' => [
             'driver' => 'custom',
             'via' => static fn () => new EmailLogHandler(
-                array_values(array_filter(array_map('trim', explode(',', (string) env('LOGGING_EMAIL_RECIPIENTS', ''))))),
+                $logRecipients,
                 env('LOG_LEVEL', 'critical'),
             ),
             'level' => env('LOG_LEVEL', 'critical'),
