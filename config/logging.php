@@ -1,5 +1,6 @@
 <?php
 
+use App\Logging\EmailLogHandler;
 use Monolog\Handler\NullHandler;
 use Monolog\Handler\StreamHandler;
 use Monolog\Handler\SyslogUdpHandler;
@@ -57,14 +58,12 @@ return [
         ],
 
         'email' => [
-            'driver' => 'monolog',
+            'driver' => 'custom',
+            'via' => static fn () => new EmailLogHandler(
+                array_values(array_filter(array_map('trim', explode(',', (string) env('LOGGING_EMAIL_RECIPIENTS', ''))))),
+                env('LOG_LEVEL', 'critical'),
+            ),
             'level' => env('LOG_LEVEL', 'critical'),
-            'handler' => Monolog\Handler\NativeMailerHandler::class,
-            'handler_with' => [
-                'to' => array_values(array_filter(array_map('trim', explode(',', (string) env('LOGGING_EMAIL_RECIPIENTS', ''))))),
-                'subject' => env('APP_NAME', 'Laravel') . ' log alert',
-                'from' => env('MAIL_FROM_ADDRESS', 'no-reply@example.com'),
-            ],
         ],
 
         'single' => [
