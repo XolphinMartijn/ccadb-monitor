@@ -6,7 +6,6 @@ use Monolog\Handler\SyslogUdpHandler;
 use Monolog\Processor\PsrLogMessageProcessor;
 
 return [
-
     /*
     |--------------------------------------------------------------------------
     | Default Log Channel
@@ -51,11 +50,21 @@ return [
     */
 
     'channels' => [
-
         'stack' => [
             'driver' => 'stack',
             'channels' => explode(',', (string) env('LOG_STACK', 'teams')),
             'ignore_exceptions' => false,
+        ],
+
+        'email' => [
+            'driver' => 'monolog',
+            'level' => env('LOG_LEVEL', 'critical'),
+            'handler' => Monolog\Handler\NativeMailerHandler::class,
+            'handler_with' => [
+                'to' => array_values(array_filter(array_map('trim', explode(',', (string) env('LOGGING_EMAIL_RECIPIENTS', ''))))),
+                'subject' => env('APP_NAME', 'Laravel') . ' log alert',
+                'from' => env('MAIL_FROM_ADDRESS', 'no-reply@example.com'),
+            ],
         ],
 
         'single' => [
@@ -136,7 +145,5 @@ return [
         'emergency' => [
             'path' => storage_path('logs/laravel.log'),
         ],
-
     ],
-
 ];
