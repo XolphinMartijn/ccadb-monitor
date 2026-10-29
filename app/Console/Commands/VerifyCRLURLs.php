@@ -85,9 +85,10 @@ class VerifyCRLURLs extends Command
             $this->processRecordUrlFields($row, $i + 1, $mode);
         }
 
-        // Retest all CRLs using a random user-agent from the configured CSV for every request.
+        // Separate user-agent access check: only confirm the CRL can be downloaded with a different UA.
+        // Do not re-run age/signature validation in this pass.
         foreach ($records as $i => $row) {
-            $this->processRecordUrlFields($row, $i + 1, $mode, $this->getRandomUserAgent());
+            $this->processUserAgentAccessCheck($row, $i + 1, $mode);
         }
 
         if ($mode == "Integrated") {
@@ -107,6 +108,79 @@ class VerifyCRLURLs extends Command
             }
         }
         return 0;
+    }
+
+    /**
+     * Verify that the CRL can be downloaded with a different random User-Agent.
+     * This is a separate availability test and must not re-check expiration/age.
+     */
+    private function processUserAgentAccessCheck(array $row, int $index, string $mode): void
+    {
+        $issue = new Issue();
+        $id = $row['id'] ?? 0;
+        $subject = $row['Certificate Name'];
+        $salesforceRecordID = $row['Salesforce Record ID'];
+
+        foreach (self::URL_FIELDS as $field) {
+            if (!array_key_exists($field, $row)) {
+                continue;
+            }
+
+            $raw = $row[$field];
+            $value = is_string($raw) ? trim($raw) : trim((string) $raw);
+            if ($value === '') {
+                continue;
+            }
+
+            $parts = $field === 'Full CRL Issued By This CA' ? [$value] : json_decode($value, true);
+            if (!is_array($parts)) {
+                $parts = [$value];
+            }
+
+            foreach ($parts as $url) {
+                if ($field === 'JSON Array of Partitioned CRLs' && $value === '[""]') {
+                    continue;
+                }
+
+                $ua = $this->getRandomUserAgent();
+
+                if (!filter_var($url, FILTER_VALIDATE_URL) || !preg_match('/^http:\/\//i', $url)) {
+                    $message = 'Invalid URL format or scheme (must be http) during User-Agent access check using User-Agent "' . $ua . '"';
+                    $this->logFieldError($field, $message, $subject, $salesforceRecordID, $value, $url);
+                    if ($mode === 'Integrated') {
+                        $issue->createOrUpdateError($id, $url, $message, 'CRL: User-Agent access check failed', false);
+                    }
+                    continue;
+                }
+
+                try {
+                    $response = Http::withHeaders([
+                        'User-Agent' => $ua,
+                    ])->withOptions([
+                        'allow_redirects' => [
+                            'max' => 10,
+                            'track_redirects' => true,
+                        ],
+                    ])->timeout(30)->get($url);
+                } catch (\Throwable $e) {
+                    $message = 'GET request failed during User-Agent access check using User-Agent "' . $ua . '": ' . $e->getMessage();
+                    $this->logFieldError($field, $message, $subject, $salesforceRecordID, $value, $url);
+                    if ($mode === 'Integrated') {
+                        $issue->createOrUpdateError($id, $url, $message, 'CRL: User-Agent access check failed', false);
+                    }
+                    continue;
+                }
+
+                if ($response->status() !== 200) {
+                    $message = 'Non-200 HTTP status during User-Agent access check using User-Agent "' . $ua . '": ' . $response->status();
+                    $this->logFieldError($field, $message, $subject, $salesforceRecordID, $value, $url);
+                    if ($mode === 'Integrated') {
+                        $issue->createOrUpdateError($id, $url, $message, 'CRL: User-Agent access check failed', false);
+                    }
+                    continue;
+                }
+            }
+        }
     }
 
     /**
