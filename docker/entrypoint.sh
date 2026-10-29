@@ -1,8 +1,9 @@
 #!/bin/bash
 
-# Seed the .env file if there is no file present
-if [ ! -f "/app/.env" ]; then
-  cat /app/.env.example | envsubst > /app/.env
+# Always build .env from the current container environment so runtime values
+# (SMTP, recipients, webhook URLs, etc.) override any stale values baked into the image.
+if [ -f "/app/.env.example" ]; then
+  envsubst < /app/.env.example > /app/.env
 fi
 
 # Create the database file
