@@ -85,6 +85,11 @@ class VerifyCRLURLs extends Command
             $this->processRecordUrlFields($row, $i + 1, $mode);
         }
 
+        // Retest all CRLs using a random user-agent from the configured CSV for every request.
+        foreach ($records as $i => $row) {
+            $this->processRecordUrlFields($row, $i + 1, $mode, $this->getRandomUserAgent());
+        }
+
         if ($mode == "Integrated") {
             $setting = new Setting();
             $setting->setLastCRLURLCheckNow();
@@ -107,7 +112,7 @@ class VerifyCRLURLs extends Command
     /**
      * Inspect URL fields for a single record and validate them.
      */
-    private function processRecordUrlFields(array $row, int $index, string $mode): void
+    private function processRecordUrlFields(array $row, int $index, string $mode, ?string $userAgentOverride = null): void
     {
         $issue = new Issue();
         $id = $row['id'] ?? 0;
@@ -135,7 +140,7 @@ class VerifyCRLURLs extends Command
             }
 
             // Ensure the field contains only URLs (no extra non-URL content)
-            $ua = (string)config('app.http_user_agent', 'CCADBURLMonitor/1.0');
+            $ua = $userAgentOverride ?? $this->getRandomUserAgent();
 
             foreach ($parts as $url) {
                 if ($field === 'JSON Array of Partitioned CRLs' && $value == '[""]') {
@@ -144,11 +149,11 @@ class VerifyCRLURLs extends Command
                 }
                 // Validate URL structure and scheme
                 if (!filter_var($url, FILTER_VALIDATE_URL) || !preg_match('/^http:\/\//i', $url)) {
-
-                    $this->logFieldError($field, 'Invalid URL format or scheme (must be http)', $subject, $salesforceRecordID, $value, $url);
+                    $message = 'Invalid URL format or scheme (must be http) using User-Agent "' . $ua . '"';
+                    $this->logFieldError($field, $message, $subject, $salesforceRecordID, $value, $url);
 
                     if ($mode === 'Integrated') {
-                        $issue->createOrUpdateError($id, $url, 'Invalid URL format or scheme (must be http): ' . $url, 'CRL: Invalid URL format or scheme (must be http)', false);
+                        $issue->createOrUpdateError($id, $url, $message, 'CRL: Invalid URL format or scheme (must be http)', false);
                     }
 
                     continue; // move to next URL
@@ -172,17 +177,19 @@ class VerifyCRLURLs extends Command
                         ],
                     ])->timeout(30)->get($url);
                 } catch (\Throwable $e) {
-                    $this->logFieldError($field, 'GET request failed: ' . $e->getMessage(), $subject, $salesforceRecordID, $value, $url);
+                    $message = 'GET request failed using User-Agent "' . $ua . '": ' . $e->getMessage();
+                    $this->logFieldError($field, $message, $subject, $salesforceRecordID, $value, $url);
                     if ($mode === 'Integrated') {
-                        $issue->createOrUpdateError($id, $url, 'GET request failed: ' . $e->getMessage(), 'CRL: GET request failed', false);
+                        $issue->createOrUpdateError($id, $url, $message, 'CRL: GET request failed', false);
                     }
                     continue;
                 }
 
                 if ($response->status() !== 200) {
-                    $this->logFieldError($field, 'Non-200 HTTP status: ' . $response->status(), $subject, $salesforceRecordID, $value, $url);
+                    $message = 'Non-200 HTTP status using User-Agent "' . $ua . '": ' . $response->status();
+                    $this->logFieldError($field, $message, $subject, $salesforceRecordID, $value, $url);
                     if ($mode === 'Integrated') {
-                        $issue->createOrUpdateError($id, $url, 'Non-200 HTTP status: ' . $response->status(), 'CRL: Non-200 HTTP status', false);
+                        $issue->createOrUpdateError($id, $url, $message, 'CRL: Non-200 HTTP status', false);
                     }
                     continue;
                 }
@@ -195,8 +202,8 @@ class VerifyCRLURLs extends Command
                     if ($thisUpdateDate !== null) {
                         if (!$this->isCRLWithinAcceptableAge($thisUpdateDate, $subject)) {
 
-                                $maxHours = $this->getMaxCRLSignatureAgeHours($subject);
-                             $message = "$caCertificateType CRL exceeds maximum age of {$maxHours} hours (signed: " . $thisUpdateDate->format('Y-m-d H:i:s') . ')';
+                            $maxHours = $this->getMaxCRLSignatureAgeHours($subject);
+                            $message = "$caCertificateType CRL exceeds maximum age of {$maxHours} hours using User-Agent \"{$ua}\" (signed: " . $thisUpdateDate->format('Y-m-d H:i:s') . ')';
                             $this->logFieldError($field, $message, $subject, $salesforceRecordID, $value, $url);
                             if ($mode === 'Integrated') {
                                 $issue->createOrUpdateError($id, $url, $message, 'CRL: CRL too old', false);
@@ -210,15 +217,41 @@ class VerifyCRLURLs extends Command
                         }
                     }
                 } catch (\Throwable $e) {
-                    $this->logFieldError($field, 'CRL signature date verification failed: ' . $e->getMessage(), $subject, $salesforceRecordID, $value, $url);
+                    $message = 'CRL signature date verification failed using User-Agent "' . $ua . '": ' . $e->getMessage();
+                    $this->logFieldError($field, $message, $subject, $salesforceRecordID, $value, $url);
                     if ($mode === 'Integrated') {
-                        $issue->createOrUpdateError($id, $url, 'CRL signature date verification failed: ' . $e->getMessage(), 'CRL: Signature verification error', false);
+                        $issue->createOrUpdateError($id, $url, $message, 'CRL: Signature verification error', false);
                     }
                     continue;
                 }
 
             }
         }
+    }
+
+    /**
+     * Return a random User-Agent from the CSV file in resources/user-agents.csv.
+     */
+    private function getRandomUserAgent(): string
+    {
+        $defaultUserAgent = (string) config('app.http_user_agent', 'CCADBURLMonitor/1.0');
+        $csvPath = base_path('resources/user-agents.csv');
+
+        if (!is_file($csvPath)) {
+            return $defaultUserAgent;
+        }
+
+        $lines = file($csvPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        if ($lines === false || $lines === []) {
+            return $defaultUserAgent;
+        }
+
+        $userAgents = array_values(array_filter(array_map('trim', $lines)));
+        if ($userAgents === []) {
+            return $defaultUserAgent;
+        }
+
+        return $userAgents[array_rand($userAgents)];
     }
 
     /**
