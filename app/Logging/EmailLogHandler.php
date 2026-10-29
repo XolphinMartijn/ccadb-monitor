@@ -19,7 +19,18 @@ class EmailLogHandler extends AbstractProcessingHandler
      */
     public function __construct(array $recipients = [], int|string|Level $level = Level::Critical, bool $bubble = true)
     {
-        $this->recipients = $recipients ?: array_values(array_filter(array_map('trim', explode(',', (string) env('LOGGING_EMAIL_RECIPIENTS', '')))));
+        $this->recipients = $recipients !== []
+            ? $recipients
+            : array_values(array_filter(array_map('trim', preg_split('/\s*,\s*/', (string) env('LOGGING_EMAIL_RECIPIENTS', '')))));
+
+        if (is_string($level)) {
+            $normalized = strtoupper($level);
+            $level = Level::fromName($normalized);
+        }
+
+        if (is_int($level)) {
+            $level = Level::from($level);
+        }
 
         parent::__construct($level, $bubble);
     }

@@ -6,19 +6,17 @@ use Monolog\Handler\StreamHandler;
 use Monolog\Handler\SyslogUdpHandler;
 use Monolog\Processor\PsrLogMessageProcessor;
 
-$logStack = array_values(array_filter(array_map('trim', explode(',', (string) env('LOG_STACK', 'email')))));
+$logStack = array_values(array_filter(array_map('trim', preg_split('/\s*,\s*/', (string) env('LOG_STACK', 'email')))));
 if ($logStack === []) {
     $logStack = ['email'];
 }
 
-$logRecipients = array_values(array_filter(array_map('trim', explode(',', (string) env('LOGGING_EMAIL_RECIPIENTS', '')))));
-if (!in_array('email', $logStack, true) && $logRecipients !== []) {
+$logRecipients = array_values(array_filter(array_map('trim', preg_split('/\s*,\s*/', (string) env('LOGGING_EMAIL_RECIPIENTS', '')))));
+if ($logRecipients !== [] && ! in_array('email', $logStack, true)) {
     $logStack[] = 'email';
 }
 
-if (! in_array('email', $logStack, true)) {
-    $logStack[] = 'email';
-}
+$logStack = array_values(array_unique($logStack));
 
 return [
     /*
@@ -73,10 +71,12 @@ return [
 
         'email' => [
             'driver' => 'custom',
-            'via' => static fn () => new EmailLogHandler(
-                $logRecipients,
-                env('LOG_LEVEL', 'critical'),
-            ),
+            'via' => static fn (array $config) => new \Monolog\Logger('laravel', [
+                new EmailLogHandler(
+                    $logRecipients,
+                    env('LOG_LEVEL', 'critical'),
+                ),
+            ]),
             'level' => env('LOG_LEVEL', 'critical'),
         ],
 
