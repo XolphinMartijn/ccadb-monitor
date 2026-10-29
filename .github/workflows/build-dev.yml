@@ -3,7 +3,7 @@ name: Docker - Dev Build
 # Run a new build/release for each commit on the main branch.
 on:
   push:
-    branches: [ main ]
+    branches: [ * ]
   workflow_dispatch:
 
 env:
