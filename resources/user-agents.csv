@@ -9998,3 +9998,8 @@ CastBox/7.41.2-181026074 (Linux\;Android 7.0) ExoPlayerLib/2.8.0
 Mozilla/5.0 (Windows NT 10.0\; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/69.0.3497.100 Safari/537.36 OPR/56.0.3051.52
 Mozilla/5.0 (Windows NT 10.0\; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/68.0.3440.106 YaBrowser/18.9.1.954 Yowser/2.5 Safari/537.36
 Castbox/4.15.1 (fm.castbox.audiobook.radio.podcast\; build:4\; iOS 12.0.1) Alamofire/4.7.3
+Python-urllib
+libwww-perl
+lwp-trivial
+Java/1.8.x
+Java/1.8.0_292
